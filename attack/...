@@ -46,7 +46,7 @@ local function GetEnemiesInRange(maxDistance)
 end
 
 -- Auto Attack tất cả NPC trong bán kính (120 lần/s)
-local attackRange = 30
+local attackRange = 100
 local delay = 1 / 120 -- 120 lần / giây
 
 task.spawn(function()
