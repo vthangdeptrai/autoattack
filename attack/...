@@ -1,66 +1,55 @@
--- // Auto Attack Script (AOE Version, 120 hits/s)
--- Đánh tất cả NPC trong bán kính 30, spam 120 lần mỗi giây
-
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
-local Players = game:GetService("Players")
 
 local player = Players.LocalPlayer
 
--- RemoteEvents (nằm trong Modules/Net)
+-- Đợi player load xong
+repeat wait() until player and player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+
+-- Lấy Net
 local net = ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Net")
+local registerAttack = net:FindFirstChild("RE/RegisterAttack")
+local registerHit = net:FindFirstChild("RE/RegisterHit")
 
-local registerAttack = net:FindFirstChild("RegisterAttack") or net:FindFirstChild("RE/RegisterAttack")
-local registerHit = net:FindFirstChild("RegisterHit") or net:FindFirstChild("RE/RegisterHit")
+if not registerAttack or not registerHit then return end
 
--- Debug nếu không tìm thấy
-if not registerAttack or not registerHit then
-    warn("⚠️ Không tìm thấy RegisterAttack hoặc RegisterHit trong Net!")
-    for _, obj in ipairs(net:GetChildren()) do
-        print("👉 Trong Net có:", obj.Name, obj.ClassName)
-    end
-    return
-end
+local attackPerSecond = 40
+local attackDelay = 1 / attackPerSecond
+local attackRange = 100
 
--- Hàm lấy tất cả NPC trong bán kính
-local function GetEnemiesInRange(maxDistance)
-    local enemiesFolder = Workspace:FindFirstChild("Enemies")
-    if not enemiesFolder then return {} end
-
-    local char = player.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    if not root then return {} end
-
-    local result = {}
+-- Lấy NPC gần player nhất còn sống
+local function GetClosestEnemy(maxDistance)
+    local enemiesFolder = Workspace:FindFirstChild("Enemies") -- sửa tên folder nếu game khác
+    if not enemiesFolder then return nil end
+    local root = player.Character.HumanoidRootPart
+    local closest = nil
+    local minDist = maxDistance
     for _, npc in pairs(enemiesFolder:GetChildren()) do
-        local humanoid = npc:FindFirstChildOfClass("Humanoid")
-        local hitPart = npc:FindFirstChild("Head")
-        if humanoid and humanoid.Health > 0 and hitPart then
-            local d = (hitPart.Position - root.Position).Magnitude
-            if d <= maxDistance then
-                table.insert(result, npc)
+        if npc and npc.Parent then
+            local humanoid = npc:FindFirstChildOfClass("Humanoid")
+            local head = npc:FindFirstChild("Head")
+            if humanoid and humanoid.Health > 0 and head then
+                local d = (head.Position - root.Position).Magnitude
+                if d <= minDist then
+                    closest = npc
+                    minDist = d
+                end
             end
         end
     end
-    return result
+    return closest
 end
 
--- Auto Attack tất cả NPC trong bán kính (120 lần/s)
-local attackRange = 100
-local delay = 1 / 120 -- 120 lần / giây
-
+-- Auto Attack liên tục
 task.spawn(function()
-    while task.wait(delay) do
-        local enemies = GetEnemiesInRange(attackRange)
-        if #enemies > 0 then
-            for _, npc in ipairs(enemies) do
-                local hitPart = npc:FindFirstChild("Head")
-                if hitPart then
-                    -- Spam tấn công 120 lần/s
-                    registerAttack:FireServer(1)
-                    registerHit:FireServer(hitPart, {}, "default_code", 0.5)
-                end
-            end
+    while task.wait(attackDelay) do
+        local targetNPC = GetClosestEnemy(attackRange)
+        if targetNPC and targetNPC:FindFirstChild("Head") then
+            pcall(function()
+                registerAttack:FireServer(1)
+                registerHit:FireServer(targetNPC.Head, {}, "default_code", 0.5)
+            end)
         end
     end
 end)
