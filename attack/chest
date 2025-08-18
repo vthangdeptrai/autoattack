@@ -1,0 +1,235 @@
+-- Cat x Chest: Auto TP Chest + bay tới đảo ngẫu nhiên + GUI kéo-thả + update status
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local player = Players.LocalPlayer
+
+-- ===== CONFIG =====
+local CHEST_FOLDER = workspace:FindFirstChild("ChestModels")
+local ISLAND_LIST = {"Ice","Jungle","Magma","MarineBase","MarineStart","Pirate","Prison","Windmill","SkyArea2"}
+local MAP_FOLDER = workspace:FindFirstChild("Map")
+local OFFSET_Y = 3
+local FLY_SPEED = 120    -- tốc độ di chuyển bình thường (giảm để tránh kick)
+local FLY_ARRIVE_DIST = 15
+local FLY_TIMEOUT = 30
+local SPEED_BETWEEN_CHESTS = 350  -- tốc độ khi di chuyển từ rương này sang rương khác
+-- ===================
+
+local running = false
+local currentIsland = ""
+
+-- ===== GUI =====
+local function createUI()
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "Cat_x_Chest_UI"
+    screenGui.ResetOnSpawn = false
+    screenGui.Parent = game:GetService("CoreGui")
+
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 320, 0, 140)
+    frame.Position = UDim2.new(0, 20, 0, 60)
+    frame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+    frame.BorderSizePixel = 0
+    frame.Parent = screenGui
+
+    local title = Instance.new("TextLabel")
+    title.Text = "Cat x Chest"
+    title.Size = UDim2.new(1, 0, 0, 36)
+    title.Position = UDim2.new(0, 0, 0, 0)
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 22
+    title.TextColor3 = Color3.new(1,1,1)
+    title.BackgroundTransparency = 1
+    title.Parent = frame
+
+    local statusLabel = Instance.new("TextLabel")
+    statusLabel.Text = "Status: Ready"
+    statusLabel.Size = UDim2.new(1, -20, 0, 24)
+    statusLabel.Position = UDim2.new(0, 10, 0, 38)
+    statusLabel.Font = Enum.Font.Gotham
+    statusLabel.TextSize = 18
+    statusLabel.TextColor3 = Color3.fromRGB(200,255,200)
+    statusLabel.BackgroundTransparency = 1
+    statusLabel.Parent = frame
+
+    local toggleButton = Instance.new("TextButton")
+    toggleButton.Text = "Start"
+    toggleButton.Size = UDim2.new(0.4, -10, 0, 36)
+    toggleButton.Position = UDim2.new(0, 10, 0, 80)
+    toggleButton.Font = Enum.Font.GothamBold
+    toggleButton.TextSize = 20
+    toggleButton.BackgroundColor3 = Color3.fromRGB(50,180,80)
+    toggleButton.TextColor3 = Color3.new(1,1,1)
+    toggleButton.Parent = frame
+
+    -- ===== Draggable GUI =====
+    local dragging = false
+    local dragInput, mousePos, framePos
+    local function update(input)
+        local delta = input.Position - mousePos
+        frame.Position = UDim2.new(0, framePos.X + delta.X, 0, framePos.Y + delta.Y)
+    end
+
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            mousePos = input.Position
+            framePos = Vector2.new(frame.Position.X.Offset, frame.Position.Y.Offset)
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            dragInput = input
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            update(input)
+        end
+    end)
+
+    return {
+        ScreenGui = screenGui,
+        Status = statusLabel,
+        Toggle = toggleButton,
+        Frame = frame
+    }
+end
+
+local ui = createUI()
+local statusLabel = ui.Status
+local toggleButton = ui.Toggle
+
+local function updateStatus(state, islandName)
+    if state == "flying" then
+        statusLabel.Text = "Status: Đang bay tới đảo " .. (islandName or "")
+    elseif state == "arrived" then
+        statusLabel.Text = "Status: Đang ở đảo " .. (islandName or "")
+    else
+        statusLabel.Text = "Status: Ready"
+    end
+end
+
+-- ===== Helper Functions =====
+local function getPrimaryPartFor(obj)
+    if obj:IsA("Model") then
+        return obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+    elseif obj:IsA("BasePart") then
+        return obj
+    end
+    return nil
+end
+
+local function getChestParts()
+    if not CHEST_FOLDER then return {} end
+    local result = {}
+    for _,obj in ipairs(CHEST_FOLDER:GetChildren()) do
+        local part = getPrimaryPartFor(obj)
+        if part then
+            table.insert(result, part)
+        end
+    end
+    return result
+end
+
+local noclipActive = false
+local function enableNoclip()
+    noclipActive = true
+    RunService.Stepped:Connect(function()
+        if noclipActive and player.Character then
+            for _,v in pairs(player.Character:GetDescendants()) do
+                if v:IsA("BasePart") then
+                    v.CanCollide = false
+                end
+            end
+        end
+    end)
+end
+local function disableNoclip()
+    noclipActive = false
+    if player.Character then
+        for _,v in pairs(player.Character:GetDescendants()) do
+            if v:IsA("BasePart") then
+                v.CanCollide = true
+            end
+        end
+    end
+end
+
+local function moveTo(part, speed)
+    local character = player.Character or player.CharacterAdded:Wait()
+    local root = character:FindFirstChild("HumanoidRootPart")
+    if not root or not part then return end
+
+    enableNoclip()
+    local bv = Instance.new("BodyVelocity")
+    bv.MaxForce = Vector3.new(1e5,1e5,1e5)
+    bv.Parent = root
+
+    local arrived = false
+    local start = tick()
+    while not arrived and (tick() - start < FLY_TIMEOUT) and running do
+        local direction = (part.Position + Vector3.new(0, OFFSET_Y,0) - root.Position)
+        if direction.Magnitude < FLY_ARRIVE_DIST then
+            arrived = true
+            break
+        end
+        bv.Velocity = direction.Unit * speed
+        RunService.RenderStepped:Wait()
+    end
+
+    bv:Destroy()
+    disableNoclip()
+end
+
+local function flyToIsland(islandName)
+    if not islandName then return end
+    local area = MAP_FOLDER and MAP_FOLDER:FindFirstChild(islandName)
+    local targetPart = area and getPrimaryPartFor(area)
+    if not targetPart then return end
+
+    updateStatus("flying", islandName)
+    moveTo(targetPart, FLY_SPEED)
+    updateStatus("arrived", islandName)
+end
+
+-- ===== Main Loop =====
+local function runLoop()
+    running = true
+    while running do
+        local chests = getChestParts()
+        for _, chest in ipairs(chests) do
+            if not running then break end
+            updateStatus("flying", "rương")
+            moveTo(chest, SPEED_BETWEEN_CHESTS)
+        end
+
+        -- Bay tới đảo ngẫu nhiên
+        local randIsland = ISLAND_LIST[math.random(1,#ISLAND_LIST)]
+        currentIsland = randIsland
+        flyToIsland(randIsland)
+        wait(1.5)
+    end
+end
+
+toggleButton.MouseButton1Click:Connect(function()
+    if not running then
+        running = true
+        spawn(runLoop)
+        toggleButton.Text = "Stop"
+        toggleButton.BackgroundColor3 = Color3.fromRGB(200,120,50)
+    else
+        running = false
+        toggleButton.Text = "Start"
+        toggleButton.BackgroundColor3 = Color3.fromRGB(50,180,80)
+        updateStatus(nil)
+    end
+end)
