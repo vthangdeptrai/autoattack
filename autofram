@@ -1,0 +1,311 @@
+--[[ Auto Farm Level (Sea 1) + Auto Stats + Attack
+     - Nhận quest theo level (tween tới NPC, đứng 5 studs)
+     - Auto farm mob: đứng trên đầu mob (cao 15 studs, không tụt)
+     - Khi mob chết → tìm mob cùng loại gần nhất
+     - Khi không có mob → tween tới spawn chờ
+     - Attack tích hợp (spam RegisterAttack + RegisterHit)
+     - GUI bật/tắt Auto Farm, bật/tắt Auto Stats, CHỌN STAT & POINTS
+]]
+
+repeat task.wait() until game:IsLoaded() and game.Players.LocalPlayer
+
+--// Services
+local Players           = game:GetService("Players")
+local TweenService      = game:GetService("TweenService")
+local RunService        = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace         = game:GetService("Workspace")
+local UserInputService  = game:GetService("UserInputService")
+
+local LocalPlayer       = Players.LocalPlayer
+local CommF             = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_")
+
+--// Attack Remote
+local Enemies = Workspace:WaitForChild("Enemies")
+local RegisterAttack = ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Net"):WaitForChild("RE/RegisterAttack")
+local RegisterHit    = ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Net"):WaitForChild("RE/RegisterHit")
+
+--// Config
+local AUTO_FARM  = false
+local AUTO_STATS = false
+local TWEEN_SPEED = 200
+
+--// Auto Stats options (GUI sẽ đổi 2 biến này)
+local StatOptions   = {"Melee","Defense","Sword","Gun","Blox Fruit"}
+local StatIndex     = 1
+local PointOptions  = {1,5,10,20,50,100}
+local PointIndex    = 1
+
+-- Quest Table Sea 1 (giữ nguyên của bạn)
+local QUESTS = {
+    {1,9,  "BanditQuest1", 1, "Bandit", CFrame.new(1060.938,16.455,1547.784)},
+    {10,14,"JungleQuest",  1, "Monkey", CFrame.new(-1601.655,36.852,153.388)},
+    {15,29,"JungleQuest",  2, "Gorilla",CFrame.new(-1601.655,36.852,153.388)},
+    {30,39,"BuggyQuest1",  1, "Pirate", CFrame.new(-1140.176,4.752,3827.406)},
+    {40,59,"BuggyQuest1",  2, "Brute",  CFrame.new(-1140.176,4.752,3827.406)},
+    {60,74,"DesertQuest",  1, "Desert Bandit", CFrame.new(896.517,6.438,4390.149)},
+    {75,89,"DesertQuest",  2, "Desert Officer",CFrame.new(896.517,6.438,4390.149)},
+    {90,99,"SnowQuest",    1, "Snow Bandit",   CFrame.new(1386.807,87.273,-1298.358)},
+    {100,119,"SnowQuest",  2, "Snowman",       CFrame.new(1386.807,87.273,-1298.358)},
+    {120,149,"MarineQuest2",1,"Chief Petty Officer",CFrame.new(-5035.496,28.678,4324.184)},
+    {150,174,"SkyQuest",   1, "Sky Bandit",    CFrame.new(-4842.137,717.695,-2623.048)},
+    {175,189,"SkyQuest",   2, "Dark Master",   CFrame.new(-4842.137,717.695,-2623.048)},
+    {190,209,"PrisonerQuest",1,"Prisoner",     CFrame.new(5310.605,0.35,474.946)},
+    {210,249,"PrisonerQuest",2,"Dangerous Prisoner",CFrame.new(5310.605,0.35,474.946)},
+    {250,274,"ColosseumQuest",1,"Toga Warrior",CFrame.new(-1577.789,7.415,-2984.483)},
+    {275,299,"ColosseumQuest",2,"Gladiator",   CFrame.new(-1577.789,7.415,-2984.483)},
+    {300,324,"MagmaQuest", 1,"Military Soldier",CFrame.new(-5316.115,12.262,8517.003)},
+    {325,374,"MagmaQuest", 2,"Military Spy",   CFrame.new(-5316.115,12.262,8517.003)},
+    {375,399,"FishmanQuest",1,"Fishman Warrior",CFrame.new(61122.652,18.497,1569.399)},
+    {400,449,"FishmanQuest",2,"Fishman Commando",CFrame.new(61122.652,18.497,1569.399)},
+    {475,524,"SkyExp1Quest",2,"Shanda",        CFrame.new(-7863.159,5545.519,-378.422)},
+    {525,549,"SkyExp2Quest",1,"Royal Squad",   CFrame.new(-7903.382,5635.99,-1410.923)},
+    {550,624,"SkyExp2Quest",2,"Royal Soldier", CFrame.new(-7903.382,5635.99,-1410.923)},
+    {625,649,"FountainQuest",1,"Galley Pirate",CFrame.new(5258.278,38.526,4050.044)},
+    {650,9999,"FountainQuest",2,"Galley Captain",CFrame.new(5258.278,38.526,4050.044)},
+}
+
+-- Helpers
+local function HRP(c) return c and c:FindFirstChild("HumanoidRootPart") end
+local function QuestOfLevel(lv)
+    for _,q in ipairs(QUESTS) do
+        if lv >= q[1] and lv <= q[2] then
+            return {NameQuest=q[3], QuestLv=q[4], Mob=q[5], Npc=q[6]}
+        end
+    end
+end
+
+-- Tween (chống spam)
+local isTweening = false
+local function tweenTo(cf)
+    local hrp = HRP(LocalPlayer.Character)
+    if not hrp or isTweening then return end
+    isTweening = true
+    local conn = RunService.Stepped:Connect(function()
+        for _,p in pairs(LocalPlayer.Character:GetDescendants()) do
+            if p:IsA("BasePart") then p.CanCollide = false end
+        end
+    end)
+    local dist = (hrp.Position - cf.Position).Magnitude
+    local dur = math.clamp(dist / TWEEN_SPEED, 0.05, 5)
+    local tw = TweenService:Create(hrp, TweenInfo.new(dur, Enum.EasingStyle.Linear), {CFrame = cf})
+    tw:Play(); tw.Completed:Wait()
+    conn:Disconnect()
+    isTweening = false
+end
+
+-- Quest UI check
+local function HasQuestUI()
+    local pg = LocalPlayer:FindFirstChild("PlayerGui")
+    if not pg then return false end
+    local main = pg:FindFirstChild("Main")
+    if main then
+        local q = main:FindFirstChild("Quest")
+        if q and q:IsA("Frame") and q.Visible then return true end
+    end
+    return false
+end
+
+-- Accept Quest
+local function AcceptQuest(q)
+    tweenTo(q.Npc) -- q.Npc là CFrame
+    task.wait(0.2)
+    pcall(function()
+        CommF:InvokeServer("StartQuest", q.NameQuest, q.QuestLv)
+    end)
+end
+
+-- Farm mob
+local currentMob, mobConn = nil, nil
+local function farmQuestMob(mobName, spawnPos)
+    -- clear nếu mob hiện tại chết/mất
+    if currentMob and (not currentMob.Parent or not currentMob:FindFirstChild("Humanoid") or currentMob.Humanoid.Health <= 0) then
+        currentMob = nil
+        if mobConn then mobConn:Disconnect() mobConn = nil end
+    end
+
+    -- tìm mob gần nhất (dùng string.find để khớp tên có [Lv.])
+    if not currentMob then
+        local nearest,dist=nil,1e9
+        local hrp=HRP(LocalPlayer.Character)
+        for _,m in pairs(Enemies:GetChildren()) do
+            local hum=m:FindFirstChildOfClass("Humanoid")
+            local root=m:FindFirstChild("HumanoidRootPart")
+            if hum and hum.Health>0 and root and string.find(m.Name, mobName) then
+                local d=(root.Position-hrp.Position).Magnitude
+                if d<dist then nearest,dist=m,d end
+            end
+        end
+        currentMob=nearest
+    end
+
+    if currentMob then
+        local mobHrp=currentMob:FindFirstChild("HumanoidRootPart")
+        local hrp=HRP(LocalPlayer.Character)
+        if mobHrp and hrp then
+            tweenTo(mobHrp.CFrame*CFrame.new(0,15,0))
+            task.wait(0.05)
+            if mobConn then mobConn:Disconnect() end
+            mobConn=RunService.Stepped:Connect(function()
+                if currentMob and currentMob.Parent and currentMob:FindFirstChild("Humanoid") and currentMob.Humanoid.Health>0 then
+                    local mobHrp=currentMob.HumanoidRootPart
+                    local hrp=HRP(LocalPlayer.Character)
+                    if mobHrp and hrp then
+                        hrp.Velocity=Vector3.zero
+                        hrp.CFrame=CFrame.new(mobHrp.Position+Vector3.new(0,15,0),mobHrp.Position+Vector3.new(0,15,1))
+                    end
+                else
+                    if mobConn then mobConn:Disconnect() mobConn=nil end
+                end
+            end)
+        end
+    else
+        if spawnPos then
+            tweenTo(spawnPos+Vector3.new(0,20,0)) -- chờ mob
+        end
+    end
+end
+
+-- Attack functions
+local function doAttack()
+    pcall(function()
+        RegisterAttack:FireServer(0.4)
+    end)
+end
+local function doHitAll()
+    local hitTargets={}
+    for _,npc in pairs(Enemies:GetChildren())do
+        if npc:FindFirstChild("Humanoid")and npc.Humanoid.Health>0 then
+            local part = npc:FindFirstChild("LeftLowerLeg") or npc:FindFirstChild("LeftHand") or npc:FindFirstChild("HumanoidRootPart")
+            if part then table.insert(hitTargets,{npc,part}) end
+        end
+    end
+    if #hitTargets>0 then
+        local args={hitTargets[1][2],hitTargets,[4]="default_code"}
+        pcall(function() RegisterHit:FireServer(unpack(args)) end)
+    end
+end
+
+--========================
+--        GUI
+--========================
+local gui=Instance.new("ScreenGui")
+gui.Name="AutoFarmUI"
+gui.ResetOnSpawn=false
+gui.Parent=game.CoreGui
+
+local Frame=Instance.new("Frame", gui)
+Frame.Size=UDim2.new(0,260,0,210)
+Frame.Position=UDim2.new(0.7,0,0.3,0)
+Frame.BackgroundColor3=Color3.fromRGB(240,240,240)
+Frame.Active=true
+Frame.Draggable=true  -- ✅ kéo thả được
+
+local Title=Instance.new("TextLabel", Frame)
+Title.Size=UDim2.new(1,0,0,28)
+Title.BackgroundColor3=Color3.fromRGB(220,220,220)
+Title.Text="🐟 Auto Farm + Stats"
+Title.TextColor3=Color3.fromRGB(0,0,0)
+Title.Font=Enum.Font.SourceSansBold
+Title.TextSize=16
+
+local FarmBtn=Instance.new("TextButton", Frame)
+FarmBtn.Size=UDim2.new(0.5,-15,0,32)
+FarmBtn.Position=UDim2.new(0,10,0,40)
+FarmBtn.BackgroundColor3=Color3.fromRGB(200,0,0)
+FarmBtn.Text="Auto Farm: OFF"
+FarmBtn.TextColor3=Color3.new(1,1,1)
+FarmBtn.Font=Enum.Font.SourceSansBold
+FarmBtn.TextSize=14
+
+local StatsBtn=Instance.new("TextButton", Frame)
+StatsBtn.Size=UDim2.new(0.5,-15,0,32)
+StatsBtn.Position=UDim2.new(0.5,5,0,40)
+StatsBtn.BackgroundColor3=Color3.fromRGB(200,0,0)
+StatsBtn.Text="Auto Stats: OFF"
+StatsBtn.TextColor3=Color3.new(1,1,1)
+StatsBtn.Font=Enum.Font.SourceSansBold
+StatsBtn.TextSize=14
+
+local StatBtn=Instance.new("TextButton", Frame)
+StatBtn.Size=UDim2.new(0.5,-15,0,32)
+StatBtn.Position=UDim2.new(0,10,0,80)
+StatBtn.BackgroundColor3=Color3.fromRGB(220,220,220)
+StatBtn.TextColor3=Color3.fromRGB(0,0,0)
+StatBtn.Font=Enum.Font.SourceSans
+StatBtn.TextSize=14
+StatBtn.Text="Stat: "..StatOptions[StatIndex]
+
+local PointsBtn=Instance.new("TextButton", Frame)
+PointsBtn.Size=UDim2.new(0.5,-15,0,32)
+PointsBtn.Position=UDim2.new(0.5,5,0,80)
+PointsBtn.BackgroundColor3=Color3.fromRGB(220,220,220)
+PointsBtn.TextColor3=Color3.fromRGB(0,0,0)
+PointsBtn.Font=Enum.Font.SourceSans
+PointsBtn.TextSize=14
+PointsBtn.Text="Points: "..PointOptions[PointIndex]
+
+-- Toggle handlers
+local function setFarm(on)
+    AUTO_FARM=on
+    FarmBtn.BackgroundColor3 = on and Color3.fromRGB(0,170,0) or Color3.fromRGB(200,0,0)
+    FarmBtn.Text = "Auto Farm: "..(on and "ON" or "OFF")
+end
+local function setStats(on)
+    AUTO_STATS=on
+    StatsBtn.BackgroundColor3 = on and Color3.fromRGB(0,170,0) or Color3.fromRGB(200,0,0)
+    StatsBtn.Text = "Auto Stats: "..(on and "ON" or "OFF")
+end
+FarmBtn.MouseButton1Click:Connect(function() setFarm(not AUTO_FARM) end)
+StatsBtn.MouseButton1Click:Connect(function() setStats(not AUTO_STATS) end)
+StatBtn.MouseButton1Click:Connect(function()
+    StatIndex = (StatIndex % #StatOptions) + 1
+    StatBtn.Text = "Stat: "..StatOptions[StatIndex]
+end)
+PointsBtn.MouseButton1Click:Connect(function()
+    PointIndex = (PointIndex % #PointOptions) + 1
+    PointsBtn.Text = "Points: "..PointOptions[PointIndex]
+end)
+
+--========================
+--      Auto Stats
+--========================
+task.spawn(function()
+    while task.wait(0.8) do
+        if AUTO_STATS then
+            local pointsNeeded = PointOptions[PointIndex]
+            local statName = StatOptions[StatIndex]
+            local ok, _ = pcall(function()
+                local pts = LocalPlayer.Data.Points.Value
+                if pts >= pointsNeeded then
+                    CommF:InvokeServer("AddPoint", statName, pointsNeeded)
+                end
+            end)
+        end
+    end
+end)
+
+--========================
+--      Main Loop
+--========================
+task.spawn(function()
+    while task.wait(0.08) do
+        if not AUTO_FARM then continue end
+        -- level & quest
+        local lv=1
+        pcall(function() lv=LocalPlayer.Data.Level.Value end)
+        local q=QuestOfLevel(lv)
+        if not q then continue end
+
+        if not HasQuestUI() then
+            AcceptQuest(q)
+        end
+
+        -- farm theo mob
+        farmQuestMob(q.Mob, q.Npc.Position)
+
+        -- attack spam
+        doAttack()
+        doHitAll()
+    end
+end)
