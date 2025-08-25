@@ -1,0 +1,89 @@
+--// Auto Stats Blox Fruits (GUI sáng đơn giản)
+
+-- Settings
+_G.AutoStats = false
+_G.StatToUpgrade = "Melee"
+_G.PointsPerUpgrade = 1
+
+-- Services
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local StatEvent = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_")
+
+-- Auto Upgrade Loop
+task.spawn(function()
+    while task.wait(1) do
+        if _G.AutoStats then
+            local Stats = LocalPlayer:WaitForChild("Data"):WaitForChild("Points")
+            if Stats.Value > 0 then
+                StatEvent:InvokeServer("AddPoint", _G.StatToUpgrade, _G.PointsPerUpgrade)
+                print("✅ Đã cộng", _G.PointsPerUpgrade, "vào", _G.StatToUpgrade)
+            end
+        end
+    end
+end)
+
+-- GUI
+local ScreenGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
+local Frame = Instance.new("Frame", ScreenGui)
+Frame.Size = UDim2.new(0, 220, 0, 160)
+Frame.Position = UDim2.new(0.7, 0, 0.3, 0)
+Frame.BackgroundColor3 = Color3.fromRGB(240, 240, 240)
+Frame.BorderSizePixel = 2
+Frame.Active = true
+Frame.Draggable = true
+
+local Title = Instance.new("TextLabel", Frame)
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
+Title.Text = "Auto Stats | Blox Fruits"
+Title.TextColor3 = Color3.fromRGB(0,0,0)
+Title.Font = Enum.Font.SourceSansBold
+Title.TextSize = 16
+
+local ToggleButton = Instance.new("TextButton", Frame)
+ToggleButton.Size = UDim2.new(1, -20, 0, 30)
+ToggleButton.Position = UDim2.new(0, 10, 0, 40)
+ToggleButton.Text = "Auto Stats: OFF"
+ToggleButton.BackgroundColor3 = Color3.fromRGB(220, 220, 220)
+ToggleButton.TextColor3 = Color3.fromRGB(0,0,0)
+ToggleButton.Font = Enum.Font.SourceSans
+ToggleButton.TextSize = 14
+
+ToggleButton.MouseButton1Click:Connect(function()
+    _G.AutoStats = not _G.AutoStats
+    ToggleButton.Text = "Auto Stats: " .. (_G.AutoStats and "ON" or "OFF")
+end)
+
+local Dropdown = Instance.new("TextButton", Frame)
+Dropdown.Size = UDim2.new(1, -20, 0, 30)
+Dropdown.Position = UDim2.new(0, 10, 0, 80)
+Dropdown.Text = "Stat: " .. _G.StatToUpgrade
+Dropdown.BackgroundColor3 = Color3.fromRGB(220, 220, 220)
+Dropdown.TextColor3 = Color3.fromRGB(0,0,0)
+
+local statsList = {"Melee", "Defense", "Sword", "Gun", "Blox Fruit"}
+local currentIndex = 1
+
+Dropdown.MouseButton1Click:Connect(function()
+    currentIndex = currentIndex % #statsList + 1
+    _G.StatToUpgrade = statsList[currentIndex]
+    Dropdown.Text = "Stat: " .. _G.StatToUpgrade
+end)
+
+local Slider = Instance.new("TextButton", Frame)
+Slider.Size = UDim2.new(1, -20, 0, 30)
+Slider.Position = UDim2.new(0, 10, 0, 120)
+Slider.Text = "Points: " .. _G.PointsPerUpgrade
+Slider.BackgroundColor3 = Color3.fromRGB(220, 220, 220)
+Slider.TextColor3 = Color3.fromRGB(0,0,0)
+
+local pointOptions = {1, 5, 10, 20, 50, 100}
+local pointIndex = 1
+
+Slider.MouseButton1Click:Connect(function()
+    pointIndex = pointIndex % #pointOptions + 1
+    _G.PointsPerUpgrade = pointOptions[pointIndex]
+    Slider.Text = "Points: " .. _G.PointsPerUpgrade
+end)
