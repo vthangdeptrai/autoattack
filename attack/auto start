@@ -1,161 +1,254 @@
---// Auto Stats GUI (Final cho Biu 🐟)
--- GUI đẹp + chức năng cộng point thông minh
-
-if _G.BiuAutoStats then
-    warn("⚠️ Auto Stats đã chạy!")
-    return
+-- Auto Stats GUI Rework v3 (Trắng + Xanh nước, mềm mại, có thể di chuyển)
+if game:GetService("CoreGui"):FindFirstChild("AutoStatsGUI") then
+    game:GetService("CoreGui").AutoStatsGUI:Destroy()
 end
-_G.BiuAutoStats = true
 
--- Services
+local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
-local StatEvent = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_")
 
--- GUI
-local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
-ScreenGui.Name = "BiuStats"
+_G.AutoStatsRunning = true
 
-local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.new(0, 280, 0, 180)
-Main.Position = UDim2.new(0.35, 0, 0.35, 0)
-Main.BackgroundColor3 = Color3.fromRGB(240, 240, 240)
-Main.BorderSizePixel = 0
-Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 12)
+-- Tạo ScreenGui
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "AutoStatsGUI"
+ScreenGui.Parent = CoreGui
+ScreenGui.ResetOnSpawn = false
 
--- Dragging
-local UIS = game:GetService("UserInputService")
-local dragging, dragInput, dragStart, startPos
-Main.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 then
-		dragging = true
-		dragStart = input.Position
-		startPos = Main.Position
-		input.Changed:Connect(function()
-			if input.UserInputState == Enum.UserInputState.End then
-				dragging = false
-			end
-		end)
-	end
-end)
-Main.InputChanged:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseMovement then
-		dragInput = input
-	end
-end)
-UIS.InputChanged:Connect(function(input)
-	if input == dragInput and dragging then
-		local delta = input.Position - dragStart
-		Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-	end
-end)
+-- Main Frame
+local Frame = Instance.new("Frame")
+Frame.Size = UDim2.new(0, 240, 0, 320)
+Frame.Position = UDim2.new(0.05, 0, 0.2, 0)
+Frame.BackgroundColor3 = Color3.fromRGB(245, 245, 245)
+Frame.BorderSizePixel = 0
+Frame.Parent = ScreenGui
 
--- Title
-local Title = Instance.new("TextLabel", Main)
-Title.Text = "🐟 Biu Hub - Auto Stats"
-Title.Size = UDim2.new(1, -40, 0, 30)
+local FrameCorner = Instance.new("UICorner")
+FrameCorner.CornerRadius = UDim.new(0, 16)
+FrameCorner.Parent = Frame
+
+-- Title Bar
+local TitleBar = Instance.new("Frame")
+TitleBar.Size = UDim2.new(1, 0, 0, 35)
+TitleBar.BackgroundColor3 = Color3.fromRGB(173, 216, 230) -- xanh nước dịu
+TitleBar.Parent = Frame
+
+local TitleCorner = Instance.new("UICorner")
+TitleCorner.CornerRadius = UDim.new(0, 16)
+TitleCorner.Parent = TitleBar
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -70, 1, 0)
 Title.Position = UDim2.new(0, 10, 0, 0)
 Title.BackgroundTransparency = 1
-Title.TextColor3 = Color3.fromRGB(0, 0, 0)
-Title.Font = Enum.Font.SourceSansBold
-Title.TextSize = 18
+Title.Text = "🐟 Auto Stats"
+Title.TextColor3 = Color3.fromRGB(0, 80, 160)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 16
 Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = TitleBar
 
--- Collapse/Expand button
-local CollapseBtn = Instance.new("TextButton", Main)
-CollapseBtn.Size = UDim2.new(0, 30, 0, 30)
-CollapseBtn.Position = UDim2.new(1, -35, 0, 0)
-CollapseBtn.Text = "-"
-CollapseBtn.TextSize = 20
-CollapseBtn.BackgroundTransparency = 1
-CollapseBtn.TextColor3 = Color3.fromRGB(0,0,0)
+-- Nút + và -
+local PlusBtn = Instance.new("TextButton")
+PlusBtn.Size = UDim2.new(0, 30, 1, 0)
+PlusBtn.Position = UDim2.new(1, -60, 0, 0)
+PlusBtn.Text = "+"
+PlusBtn.Font = Enum.Font.GothamBold
+PlusBtn.TextSize = 20
+PlusBtn.BackgroundColor3 = Color3.fromRGB(180, 255, 180)
+PlusBtn.Parent = TitleBar
 
-local collapsed = false
-CollapseBtn.MouseButton1Click:Connect(function()
-	collapsed = not collapsed
-	if collapsed then
-		Main.Size = UDim2.new(0, 280, 0, 40)
-		CollapseBtn.Text = "+"
-	else
-		Main.Size = UDim2.new(0, 280, 0, 180)
-		CollapseBtn.Text = "-"
-	end
+local MinusBtn = Instance.new("TextButton")
+MinusBtn.Size = UDim2.new(0, 30, 1, 0)
+MinusBtn.Position = UDim2.new(1, -30, 0, 0)
+MinusBtn.Text = "-"
+MinusBtn.Font = Enum.Font.GothamBold
+MinusBtn.TextSize = 20
+MinusBtn.BackgroundColor3 = Color3.fromRGB(255, 180, 180)
+MinusBtn.Parent = TitleBar
+
+local Hidden = false
+local FullSize = UDim2.new(0, 240, 0, 320)
+
+-- Content
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1, 0, 1, -35)
+Content.Position = UDim2.new(0, 0, 0, 35)
+Content.BackgroundTransparency = 1
+Content.Parent = Frame
+
+-- Biến
+local SelectedStat = "Melee"
+local AutoEnabled = false
+local PointsToAdd = 1
+
+-- Danh sách Stat
+local Stats = {"Melee", "Defense", "Sword", "Gun"}
+local Buttons = {}
+
+local function UpdateSelection()
+    for _,btn in pairs(Buttons) do
+        if btn.Text == SelectedStat then
+            btn.BackgroundColor3 = Color3.fromRGB(173, 216, 230) -- xanh nước khi selected
+        else
+            btn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        end
+    end
+end
+
+for i,stat in ipairs(Stats) do
+    local Btn = Instance.new("TextButton")
+    Btn.Size = UDim2.new(1, -20, 0, 30)
+    Btn.Position = UDim2.new(0, 10, 0, 5 + (i-1)*35)
+    Btn.Text = stat
+    Btn.Font = Enum.Font.GothamBold
+    Btn.TextSize = 14
+    Btn.BackgroundColor3 = Color3.fromRGB(255,255,255)
+    local BtnCorner = Instance.new("UICorner")
+    BtnCorner.CornerRadius = UDim.new(0,12)
+    BtnCorner.Parent = Btn
+    Btn.Parent = Content
+    Buttons[#Buttons+1] = Btn
+
+    Btn.MouseButton1Click:Connect(function()
+        SelectedStat = stat
+        UpdateSelection()
+    end)
+end
+UpdateSelection()
+
+-- Slider
+local SliderFrame = Instance.new("Frame")
+SliderFrame.Size = UDim2.new(1, -20, 0, 50)
+SliderFrame.Position = UDim2.new(0, 10, 0, 150)
+SliderFrame.BackgroundTransparency = 1
+SliderFrame.Parent = Content
+
+local Slider = Instance.new("TextButton")
+Slider.Size = UDim2.new(1, 0, 0, 12)
+Slider.Position = UDim2.new(0, 0, 0, 10)
+Slider.BackgroundColor3 = Color3.fromRGB(220,220,220)
+Slider.Text = ""
+Slider.AutoButtonColor = false
+Slider.Parent = SliderFrame
+
+local Fill = Instance.new("Frame")
+Fill.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+Fill.Size = UDim2.new(0,0,1,0)
+local FillCorner = Instance.new("UICorner")
+FillCorner.CornerRadius = UDim.new(0,12)
+FillCorner.Parent = Fill
+Fill.Parent = Slider
+
+local SliderLabel = Instance.new("TextLabel")
+SliderLabel.Size = UDim2.new(1, 0, 0, 20)
+SliderLabel.Position = UDim2.new(0, 0, 0, 25)
+SliderLabel.Text = "Points: 1"
+SliderLabel.TextColor3 = Color3.fromRGB(0,0,0)
+SliderLabel.Font = Enum.Font.GothamBold
+SliderLabel.TextSize = 14
+SliderLabel.BackgroundTransparency = 1
+SliderLabel.Parent = SliderFrame
+
+Slider.MouseButton1Down:Connect(function(x,y)
+    local uis = game:GetService("UserInputService")
+    local function move(input)
+        local scale = math.clamp((input.Position.X - Slider.AbsolutePosition.X) / Slider.AbsoluteSize.X,0,1)
+        Fill.Size = UDim2.new(scale,0,1,0)
+        PointsToAdd = math.max(1, math.floor(scale * 100))
+        SliderLabel.Text = "Points: "..PointsToAdd
+    end
+    move({Position=Vector2.new(x,y)})
+    local conn1, conn2
+    conn1 = uis.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            move(input)
+        end
+    end)
+    conn2 = uis.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            conn1:Disconnect()
+            conn2:Disconnect()
+        end
+    end)
 end)
 
--- Toggle Auto Stats
-local ToggleBtn = Instance.new("TextButton", Main)
-ToggleBtn.Size = UDim2.new(0, 120, 0, 30)
-ToggleBtn.Position = UDim2.new(0, 10, 0, 40)
+-- Toggle Auto
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Size = UDim2.new(1, -20, 0, 40)
+ToggleBtn.Position = UDim2.new(0, 10, 0, 230)
 ToggleBtn.Text = "Auto: OFF"
-ToggleBtn.BackgroundColor3 = Color3.fromRGB(220, 220, 220)
-Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(0, 6)
+ToggleBtn.Font = Enum.Font.GothamBold
+ToggleBtn.TextSize = 16
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(200,0,0)
+local ToggleCorner = Instance.new("UICorner")
+ToggleCorner.CornerRadius = UDim.new(0,16)
+ToggleCorner.Parent = ToggleBtn
+ToggleBtn.Parent = Content
 
-local autoStats = false
 ToggleBtn.MouseButton1Click:Connect(function()
-	autoStats = not autoStats
-	ToggleBtn.Text = "Auto: " .. (autoStats and "ON" or "OFF")
+    AutoEnabled = not AutoEnabled
+    ToggleBtn.Text = "Auto: "..(AutoEnabled and "ON" or "OFF")
+    ToggleBtn.BackgroundColor3 = AutoEnabled and Color3.fromRGB(0,170,255) or Color3.fromRGB(200,0,0)
 end)
 
--- Dropdown Stat Type
-local StatBtn = Instance.new("TextButton", Main)
-StatBtn.Size = UDim2.new(0, 120, 0, 30)
-StatBtn.Position = UDim2.new(0, 150, 0, 40)
-StatBtn.Text = "Stat: Melee"
-StatBtn.BackgroundColor3 = Color3.fromRGB(220, 220, 220)
-Instance.new("UICorner", StatBtn).CornerRadius = UDim.new(0, 6)
-
-local statTypes = {"Melee", "Defense", "Sword", "Gun", "Blox Fruit"}
-local statIndex = 1
-StatBtn.MouseButton1Click:Connect(function()
-	statIndex = statIndex + 1
-	if statIndex > #statTypes then statIndex = 1 end
-	StatBtn.Text = "Stat: " .. statTypes[statIndex]
+-- Nút + / -
+MinusBtn.MouseButton1Click:Connect(function()
+    if Hidden then
+        Frame:Destroy()
+    else
+        Hidden = true
+        Content.Visible = false
+        Frame.Size = UDim2.new(0, 240, 0, 35)
+    end
 end)
 
--- Dropdown Points
-local PointBtn = Instance.new("TextButton", Main)
-PointBtn.Size = UDim2.new(0, 120, 0, 30)
-PointBtn.Position = UDim2.new(0, 10, 0, 80)
-PointBtn.Text = "Points: 1"
-PointBtn.BackgroundColor3 = Color3.fromRGB(220, 220, 220)
-Instance.new("UICorner", PointBtn).CornerRadius = UDim.new(0, 6)
-
-local pointValues = {1, 5, 10, 20, 50, 100}
-local pointIndex = 1
-PointBtn.MouseButton1Click:Connect(function()
-	pointIndex = pointIndex + 1
-	if pointIndex > #pointValues then pointIndex = 1 end
-	PointBtn.Text = "Points: " .. pointValues[pointIndex]
+PlusBtn.MouseButton1Click:Connect(function()
+    if Hidden then
+        Hidden = false
+        Content.Visible = true
+        Frame.Size = FullSize
+    end
 end)
 
--- Status
-local Status = Instance.new("TextLabel", Main)
-Status.Size = UDim2.new(1, -20, 0, 30)
-Status.Position = UDim2.new(0, 10, 0, 130)
-Status.BackgroundTransparency = 1
-Status.TextColor3 = Color3.fromRGB(0, 0, 0)
-Status.Font = Enum.Font.SourceSans
-Status.TextSize = 16
-Status.Text = "⏳ Waiting..."
+-- Drag GUI bằng TitleBar
+do
+    local dragging, dragInput, dragStart, startPos = false, nil, nil, nil
+    local function update(input)
+        local delta = input.Position - dragStart
+        Frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+    TitleBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = Frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+    TitleBar.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            dragInput = input
+        end
+    end)
+    game:GetService("UserInputService").InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            update(input)
+        end
+    end)
+end
 
--- Auto Stats Loop (0.1s)
+-- Fake Auto Stats loop
 task.spawn(function()
-	while task.wait(0.1) do
-		if autoStats then
-			local Points = LocalPlayer.Data.Points.Value
-			if Points > 0 then
-				local addAmount = pointValues[pointIndex]
-				if Points < addAmount then
-					addAmount = Points -- cộng hết số còn lại
-				end
-				StatEvent:InvokeServer("AddPoint", statTypes[statIndex], addAmount)
-				Status.Text = "✅ +" .. addAmount .. " → " .. statTypes[statIndex]
-			else
-				Status.Text = "❌ Not enough points"
-			end
-		else
-			Status.Text = "⏳ Waiting..."
-		end
-	end
+    while _G.AutoStatsRunning do
+        if AutoEnabled then
+            print("Đang cộng "..PointsToAdd.." point vào "..SelectedStat)
+            -- TODO: gửi RemoteEvent ở đây
+        end
+        task.wait(1)
+    end
 end)
