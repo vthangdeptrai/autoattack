@@ -1,4 +1,4 @@
--- Auto Stats GUI Rework v3 (Trắng + Xanh nước, mềm mại, có thể di chuyển)
+-- Auto Stats GUI Rework v3.3 (Trắng + Xanh nước, mềm mại, có thể di chuyển, animation hover, thu nhỏ an toàn)
 if game:GetService("CoreGui"):FindFirstChild("AutoStatsGUI") then
     game:GetService("CoreGui").AutoStatsGUI:Destroy()
 end
@@ -27,6 +27,12 @@ local FrameCorner = Instance.new("UICorner")
 FrameCorner.CornerRadius = UDim.new(0, 16)
 FrameCorner.Parent = Frame
 
+-- Shadow effect
+local FrameStroke = Instance.new("UIStroke")
+FrameStroke.Thickness = 2
+FrameStroke.Transparency = 0.85
+FrameStroke.Parent = Frame
+
 -- Title Bar
 local TitleBar = Instance.new("Frame")
 TitleBar.Size = UDim2.new(1, 0, 0, 35)
@@ -48,24 +54,24 @@ Title.TextSize = 16
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.Parent = TitleBar
 
--- Nút + và -
-local PlusBtn = Instance.new("TextButton")
-PlusBtn.Size = UDim2.new(0, 30, 1, 0)
-PlusBtn.Position = UDim2.new(1, -60, 0, 0)
-PlusBtn.Text = "+"
-PlusBtn.Font = Enum.Font.GothamBold
-PlusBtn.TextSize = 20
-PlusBtn.BackgroundColor3 = Color3.fromRGB(180, 255, 180)
-PlusBtn.Parent = TitleBar
+-- Nút + và - (có góc bo tròn)
+local function createCornerButton(text, posX)
+    local Btn = Instance.new("TextButton")
+    Btn.Size = UDim2.new(0, 30, 1, 0)
+    Btn.Position = UDim2.new(1, posX, 0, 0)
+    Btn.Text = text
+    Btn.Font = Enum.Font.GothamBold
+    Btn.TextSize = 20
+    Btn.BackgroundColor3 = text == "+" and Color3.fromRGB(180, 255, 180) or Color3.fromRGB(255, 180, 180)
+    local Corner = Instance.new("UICorner")
+    Corner.CornerRadius = UDim.new(0, 12)
+    Corner.Parent = Btn
+    Btn.Parent = TitleBar
+    return Btn
+end
 
-local MinusBtn = Instance.new("TextButton")
-MinusBtn.Size = UDim2.new(0, 30, 1, 0)
-MinusBtn.Position = UDim2.new(1, -30, 0, 0)
-MinusBtn.Text = "-"
-MinusBtn.Font = Enum.Font.GothamBold
-MinusBtn.TextSize = 20
-MinusBtn.BackgroundColor3 = Color3.fromRGB(255, 180, 180)
-MinusBtn.Parent = TitleBar
+local PlusBtn = createCornerButton("+", -60)
+local MinusBtn = createCornerButton("-", -30)
 
 local Hidden = false
 local FullSize = UDim2.new(0, 240, 0, 320)
@@ -89,13 +95,14 @@ local Buttons = {}
 local function UpdateSelection()
     for _,btn in pairs(Buttons) do
         if btn.Text == SelectedStat then
-            btn.BackgroundColor3 = Color3.fromRGB(173, 216, 230) -- xanh nước khi selected
+            btn.BackgroundColor3 = Color3.fromRGB(173, 216, 230)
         else
             btn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         end
     end
 end
 
+-- Tạo button với hover animation
 for i,stat in ipairs(Stats) do
     local Btn = Instance.new("TextButton")
     Btn.Size = UDim2.new(1, -20, 0, 30)
@@ -112,6 +119,16 @@ for i,stat in ipairs(Stats) do
 
     Btn.MouseButton1Click:Connect(function()
         SelectedStat = stat
+        UpdateSelection()
+    end)
+
+    -- Hover effect
+    Btn.MouseEnter:Connect(function()
+        Btn:TweenSize(UDim2.new(1, -18, 0, 32), "Out", "Quad", 0.15, true)
+        Btn.BackgroundColor3 = Color3.fromRGB(200, 230, 255)
+    end)
+    Btn.MouseLeave:Connect(function()
+        Btn:TweenSize(UDim2.new(1, -20, 0, 30), "Out", "Quad", 0.15, true)
         UpdateSelection()
     end)
 end
@@ -154,7 +171,7 @@ Slider.MouseButton1Down:Connect(function(x,y)
     local uis = game:GetService("UserInputService")
     local function move(input)
         local scale = math.clamp((input.Position.X - Slider.AbsolutePosition.X) / Slider.AbsoluteSize.X,0,1)
-        Fill.Size = UDim2.new(scale,0,1,0)
+        Fill:TweenSize(UDim2.new(scale,0,1,0), "Out", "Quad", 0.2, true)
         PointsToAdd = math.max(1, math.floor(scale * 100))
         SliderLabel.Text = "Points: "..PointsToAdd
     end
@@ -189,25 +206,24 @@ ToggleBtn.Parent = Content
 ToggleBtn.MouseButton1Click:Connect(function()
     AutoEnabled = not AutoEnabled
     ToggleBtn.Text = "Auto: "..(AutoEnabled and "ON" or "OFF")
+    ToggleBtn:TweenSize(ToggleBtn.Size, "Out", "Quad", 0.15, true)
+    ToggleBtn:TweenPosition(ToggleBtn.Position, "Out", "Quad", 0.15, true)
     ToggleBtn.BackgroundColor3 = AutoEnabled and Color3.fromRGB(0,170,255) or Color3.fromRGB(200,0,0)
 end)
 
--- Nút + / -
+-- Nút + / - (thu nhỏ an toàn)
 MinusBtn.MouseButton1Click:Connect(function()
-    if Hidden then
-        Frame:Destroy()
-    else
-        Hidden = true
-        Content.Visible = false
-        Frame.Size = UDim2.new(0, 240, 0, 35)
-    end
+    if Hidden then return end -- nếu đã thu nhỏ, không làm gì
+    Hidden = true
+    Content.Visible = false
+    Frame:TweenSize(UDim2.new(0, 240, 0, 35), "Out", "Quad", 0.2, true)
 end)
 
 PlusBtn.MouseButton1Click:Connect(function()
     if Hidden then
         Hidden = false
         Content.Visible = true
-        Frame.Size = FullSize
+        Frame:TweenSize(FullSize, "Out", "Quad", 0.2, true)
     end
 end)
 
